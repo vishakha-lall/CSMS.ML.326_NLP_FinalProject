@@ -59,7 +59,7 @@ def main():
     eval_split = 'validation_matched' if dataset_id == ('glue', 'mnli') else 'validation'
     # Load the raw data
     # Add custom small datasets
-    if dataset_id == 'squad_mini_100':
+    if dataset_id[0] == 'squad_mini_100':
         dataset = datasets.load_dataset('squad', split='validation')
         # Randomly chosen (constant) 100 indices to analyse
         dataset_samples_idx = [8322, 6927, 1020, 1329, 6026, 5130, 9287, 4701, 1082, 1417, 10104, 624, 5056, 6485, 5683,
@@ -112,7 +112,10 @@ def main():
             remove_columns=train_dataset.column_names
         )
     if training_args.do_eval:
-        eval_dataset = dataset[eval_split]
+        if dataset_id[0] == 'squad_mini_100':
+            eval_dataset = dataset
+        else:
+            eval_dataset = dataset[eval_split]
         if args.max_eval_samples:
             eval_dataset = eval_dataset.select(range(args.max_eval_samples))
         eval_dataset_featurized = eval_dataset.map(
