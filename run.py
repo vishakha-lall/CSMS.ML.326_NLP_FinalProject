@@ -2,7 +2,7 @@ import datasets
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
     AutoModelForQuestionAnswering, Trainer, TrainingArguments, HfArgumentParser
 from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
-    prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy
+    prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy, compute_accuracy_boolqa
 import os
 import json
 import pandas as pd
@@ -74,6 +74,8 @@ def main():
             contrast_set_context = pd.read_csv('contrast_set_context.csv')
             original_dataset['context'] = contrast_set_context['context']
             dataset = datasets.Dataset.from_pandas(original_dataset)
+    if dataset_id[0] == 'boolq':
+        dataset = datasets.load_dataset("super_glue", "boolq")
     else:
         dataset = datasets.load_dataset(*dataset_id)
 
@@ -115,12 +117,15 @@ def main():
         train_dataset = dataset['train']
         if args.max_train_samples:
             train_dataset = train_dataset.select(range(args.max_train_samples))
-        train_dataset_featurized = train_dataset.map(
-            prepare_train_dataset,
-            batched=True,
-            num_proc=NUM_PREPROCESSING_WORKERS,
-            remove_columns=train_dataset.column_names
-        )
+        if args.task != 'boolqa':
+            train_dataset_featurized = train_dataset.map(
+                prepare_train_dataset,
+                batched=True,
+                num_proc=NUM_PREPROCESSING_WORKERS,
+                remove_columns=train_dataset.column_names
+            )
+        else:
+            train_dataset_featurized = prepare_train_dataset
     if training_args.do_eval:
         if dataset_id[0] == 'squad_mini_30' or dataset_id[0] == 'squad_mini_30_contrast_set':
             eval_dataset = dataset
@@ -128,12 +133,15 @@ def main():
             eval_dataset = dataset[eval_split]
         if args.max_eval_samples:
             eval_dataset = eval_dataset.select(range(args.max_eval_samples))
-        eval_dataset_featurized = eval_dataset.map(
-            prepare_eval_dataset,
-            batched=True,
-            num_proc=NUM_PREPROCESSING_WORKERS,
-            remove_columns=eval_dataset.column_names
-        )
+        if args.task != 'boolqa':
+            eval_dataset_featurized = eval_dataset.map(
+                prepare_eval_dataset,
+                batched=True,
+                num_proc=NUM_PREPROCESSING_WORKERS,
+                remove_columns=eval_dataset.column_names
+            )
+        else:
+            eval_dataset_featurized = prepare_eval_dataset
 
     # Select the training configuration
     trainer_class = Trainer
@@ -151,6 +159,8 @@ def main():
             predictions=eval_preds.predictions, references=eval_preds.label_ids)
     elif args.task == 'nli':
         compute_metrics = compute_accuracy
+    elif args.task =='boolqa':
+        compute_metrics = compute_accuracy_boolqa
 
     # This function wraps the compute_metrics function, storing the model's predictions
     # so that they can be dumped along with the computed metrics

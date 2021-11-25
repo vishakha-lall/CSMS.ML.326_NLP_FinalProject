@@ -1,3 +1,4 @@
+import datasets
 import numpy as np
 import collections
 from collections import defaultdict, OrderedDict
@@ -34,6 +35,13 @@ def compute_accuracy(eval_preds: EvalPrediction):
             axis=1) == eval_preds.label_ids).astype(
             np.float32).mean().item()
     }
+
+
+def compute_accuracy_boolqa(eval_preds: EvalPrediction):
+    accuracy_score = datasets.load_metric('accuracy')
+    predictions, labels = eval_preds
+    predictions = np.argmax(predictions, axis=1)
+    return accuracy_score.compute(predictions=predictions, references=labels)
 
 
 # This function preprocesses a question answering dataset, tokenizing the question and context text
