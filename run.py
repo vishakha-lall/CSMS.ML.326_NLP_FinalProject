@@ -34,7 +34,7 @@ def main():
                       help="""This argument specifies the base model to fine-tune.
         This should either be a HuggingFace model ID (see https://huggingface.co/models)
         or a path to a saved model checkpoint (a folder containing config.json and pytorch_model.bin).""")
-    argp.add_argument('--task', type=str, choices=['nli', 'qa'], required=True,
+    argp.add_argument('--task', type=str, choices=['nli', 'qa', 'boolqa'], required=True,
                       help="""This argument specifies which task to train/evaluate on.
         Pass "nli" for natural language inference or "qa" for question answering.
         By default, "nli" will use the SNLI dataset, and "qa" will use the SQuAD dataset.""")
@@ -53,7 +53,7 @@ def main():
     training_args, args = argp.parse_args_into_dataclasses()
 
     # Dataset selection
-    default_datasets = {'qa': ('squad',), 'nli': ('snli',)}
+    default_datasets = {'qa': ('squad',), 'nli': ('snli',), 'boolqa': ('boolq',)}
     dataset_id = tuple(args.dataset.split(':')) if args.dataset is not None else \
         default_datasets[args.task]
     analysis_id = tuple(args.analysis.split(':')) if args.analysis is not None else None
@@ -79,7 +79,8 @@ def main():
 
     # Here we select the right model fine-tuning head
     model_classes = {'qa': AutoModelForQuestionAnswering,
-                     'nli': AutoModelForSequenceClassification}
+                     'nli': AutoModelForSequenceClassification,
+                     'boolqa': AutoModelForSequenceClassification}
     model_class = model_classes[args.task]
     # Initialize the model and tokenizer from the specified pretrained model/checkpoint
     model = model_class.from_pretrained(args.model, **task_kwargs)
@@ -93,6 +94,11 @@ def main():
         prepare_train_dataset = prepare_eval_dataset = \
             lambda exs: prepare_dataset_nli(exs, tokenizer, args.max_length)
         # prepare_eval_dataset = prepare_dataset_nli
+    elif args.task == 'boolqa':
+        boolq_enc = datasets.map(lambda x: tokenizer(x['question'], x['passage'], truncation="only_second"),
+                                 batched=True)
+        prepare_train_dataset = boolq_enc["train"]
+        prepare_eval_dataset = boolq_enc["validation"]
     else:
         raise ValueError('Unrecognized task name: {}'.format(args.task))
 
