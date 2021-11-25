@@ -5,6 +5,7 @@ from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
     prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy
 import os
 import json
+import pandas as pd
 
 NUM_PREPROCESSING_WORKERS = 2
 
@@ -39,6 +40,8 @@ def main():
         By default, "nli" will use the SNLI dataset, and "qa" will use the SQuAD dataset.""")
     argp.add_argument('--dataset', type=str, default=None,
                       help="""This argument overrides the default dataset used for the specified task.""")
+    argp.add_argument('--analysis', type=str, choices=['contrast_set'], default=None,
+                      help="""This argument is used for specifying which analysis we are performing (contrast_set modifies dataset)""")
     argp.add_argument('--max_length', type=int, default=128,
                       help="""This argument limits the maximum sequence length used during training/evaluation.
         Shorter sequence lengths need less memory and computation time, but some examples may end up getting truncated.""")
@@ -53,6 +56,7 @@ def main():
     default_datasets = {'qa': ('squad',), 'nli': ('snli',)}
     dataset_id = tuple(args.dataset.split(':')) if args.dataset is not None else \
         default_datasets[args.task]
+    analysis_id = tuple(args.analysis.split(':')) if args.analysis is not None else None
     # NLI models need to have the output label count specified (label 0 is "entailed", 1 is "neutral", and 2 is "contradiction")
     task_kwargs = {'num_labels': 3} if args.task == 'nli' else {}
     # MNLI has two validation splits (one with matched domains and one with mismatched domains). Most datasets just have one "validation" split
@@ -60,9 +64,16 @@ def main():
     # Load the raw data
     # Add custom small datasets
     if dataset_id[0] == 'squad_mini_30':
-        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30.csv')['train']
-    elif dataset_id[0] == 'squad_mini_30_contrast_set':
-        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30_contrast_set.csv')['train']
+        # 30 random sample indices
+        dataset_samples_idx = [7600, 4206, 253, 5315, 3636, 837, 4301, 6856, 8323, 9668, 6443, 7938, 6899, 8053, 6611,
+                               5171, 7707, 8447, 2531, 5543, 5287, 4938, 7762, 2565, 8135, 7065, 6877, 4010, 3434, 4932]
+        dataset = datasets.load_dataset('squad', split='validation')
+        dataset = dataset.select(dataset_samples_idx)
+        if analysis_id[0] == 'contrast_set':
+            original_dataset = pd.DataFrame(dataset)
+            contrast_set_context = pd.read_csv('contrast_set_context.csv')
+            original_dataset['context'] = contrast_set_context['context']
+            dataset = datasets.Dataset.from_pandas(original_dataset)
     else:
         dataset = datasets.load_dataset(*dataset_id)
 

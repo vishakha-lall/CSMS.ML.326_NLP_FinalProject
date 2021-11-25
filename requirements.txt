@@ -2,3 +2,4 @@ transformers==4.10.1
 datasets==1.11.0
 tqdm
 torch
+pandas
