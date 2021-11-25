@@ -59,17 +59,10 @@ def main():
     eval_split = 'validation_matched' if dataset_id == ('glue', 'mnli') else 'validation'
     # Load the raw data
     # Add custom small datasets
-    if dataset_id[0] == 'squad_mini_100':
-        dataset = datasets.load_dataset('squad', split='validation')
-        # Randomly chosen (constant) 100 indices to analyse
-        dataset_samples_idx = [8322, 6927, 1020, 1329, 6026, 5130, 9287, 4701, 1082, 1417, 10104, 624, 5056, 6485, 5683,
-                           1698, 3905, 4479, 3848, 1161, 7154, 8592, 5173, 8799, 6666, 5597, 2321, 7147, 6730, 6947,
-                           3035, 3447, 8709, 2873, 9217, 5328, 4772, 4404, 1452, 5493, 10180, 9931, 1778, 9292, 5692,
-                           3971, 7700, 7525, 5967, 3605, 3968, 10165, 7692, 1933, 9015, 8564, 4402, 5643, 8020, 9558,
-                           6863, 488, 1674, 5024, 1502, 6830, 1874, 285, 4842, 1655, 6409, 9807, 8150, 3853, 5541, 5556,
-                           6565, 7407, 517, 5615, 2163, 464, 7515, 3456, 6620, 7753, 5499, 7034, 8063, 6150, 6067, 6626,
-                           5636, 8533, 380, 7926, 1455, 1819, 1480, 7351]
-        dataset = dataset.select(dataset_samples_idx)
+    if dataset_id[0] == 'squad_mini_30':
+        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30.csv')
+    elif dataset_id[0] == 'squad_mini_30_contrast_set':
+        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30_contrast_set.csv')
     else:
         dataset = datasets.load_dataset(*dataset_id)
 
@@ -112,7 +105,7 @@ def main():
             remove_columns=train_dataset.column_names
         )
     if training_args.do_eval:
-        if dataset_id[0] == 'squad_mini_100':
+        if dataset_id[0] == 'squad_mini_30' or dataset_id[0] == 'squad_mini_30_contrast_set':
             eval_dataset = dataset
         else:
             eval_dataset = dataset[eval_split]
@@ -141,11 +134,11 @@ def main():
             predictions=eval_preds.predictions, references=eval_preds.label_ids)
     elif args.task == 'nli':
         compute_metrics = compute_accuracy
-    
 
     # This function wraps the compute_metrics function, storing the model's predictions
     # so that they can be dumped along with the computed metrics
     eval_predictions = None
+
     def compute_metrics_and_store_predictions(eval_preds):
         nonlocal eval_predictions
         eval_predictions = eval_preds
@@ -204,7 +197,6 @@ def main():
                     example_with_prediction['predicted_label'] = int(eval_predictions.predictions[i].argmax())
                     f.write(json.dumps(example_with_prediction))
                     f.write('\n')
-
 
 if __name__ == "__main__":
     main()
