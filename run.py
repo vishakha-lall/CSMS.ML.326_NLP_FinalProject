@@ -60,9 +60,9 @@ def main():
     # Load the raw data
     # Add custom small datasets
     if dataset_id[0] == 'squad_mini_30':
-        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30.csv')
+        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30.csv')['train']
     elif dataset_id[0] == 'squad_mini_30_contrast_set':
-        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30_contrast_set.csv')
+        dataset = datasets.load_dataset('csv',data_files='dataset_squad_mini_30_contrast_set.csv')['train']
     else:
         dataset = datasets.load_dataset(*dataset_id)
 
