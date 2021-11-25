@@ -95,7 +95,7 @@ def main():
             lambda exs: prepare_dataset_nli(exs, tokenizer, args.max_length)
         # prepare_eval_dataset = prepare_dataset_nli
     elif args.task == 'boolqa':
-        boolq_enc = datasets.map(lambda x: tokenizer(x['question'], x['passage'], truncation="only_second"),
+        boolq_enc = dataset.map(lambda x: tokenizer(x['question'], x['passage'], truncation="only_second"),
                                  batched=True)
         prepare_train_dataset = boolq_enc["train"]
         prepare_eval_dataset = boolq_enc["validation"]
