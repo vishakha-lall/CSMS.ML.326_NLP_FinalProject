@@ -57,7 +57,7 @@ def main():
     default_datasets = {'qa': ('squad',), 'nli': ('snli',), 'boolqa': ('boolq',)}
     dataset_id = tuple(args.dataset.split(':')) if args.dataset is not None else \
         default_datasets[args.task]
-    analysis_id = tuple(args.analysis.split(':')) if args.analysis is not None else None
+    analysis_id = tuple(args.analysis.split(':')) if args.analysis is not None else ('na',)
     # NLI models need to have the output label count specified (label 0 is "entailed", 1 is "neutral", and 2 is "contradiction")
     task_kwargs = {'num_labels': 3} if args.task == 'nli' else {}
     # MNLI has two validation splits (one with matched domains and one with mismatched domains). Most datasets just have one "validation" split
@@ -89,9 +89,16 @@ def main():
                                     'answer': perturbed_question['answer']}, ignore_index=True)
             perturbed_dataset.drop(['perturbed_questions'], axis=1, inplace=True)
             for index, row in perturbed_dataset.iterrows():
-                row['answer'] = row['answer'].lower()
+                if row['answer'] == 'TRUE':
+                    row['answer'] = 1
+                else:
+                    row['answer'] = 0
             perturbed_dataset.rename(columns={'paragraph': 'passage'}, inplace=True)
-            dataset = datasets.Dataset.from_pandas(perturbed_dataset)
+            perturbed_dataset.rename(columns={'answer': 'label'}, inplace=True)
+            perturbed_dataset['idx'] = perturbed_dataset.index
+            dataset = datasets.DatasetDict()
+            dataset['train'] = datasets.Dataset.from_pandas(perturbed_dataset)
+            dataset['validation'] = datasets.Dataset.from_pandas(perturbed_dataset)
     else:
         dataset = datasets.load_dataset(*dataset_id)
 
