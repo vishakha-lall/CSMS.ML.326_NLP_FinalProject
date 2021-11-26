@@ -6,6 +6,7 @@ from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
 import os
 import json
 import pandas as pd
+from pandas.io.json import json_normalize
 
 NUM_PREPROCESSING_WORKERS = 2
 
@@ -40,7 +41,7 @@ def main():
         By default, "nli" will use the SNLI dataset, and "qa" will use the SQuAD dataset.""")
     argp.add_argument('--dataset', type=str, default=None,
                       help="""This argument overrides the default dataset used for the specified task.""")
-    argp.add_argument('--analysis', type=str, choices=['contrast_set'], default=None,
+    argp.add_argument('--analysis', type=str, choices=['contrast_set','perturbed_questions'], default=None,
                       help="""This argument is used for specifying which analysis we are performing (contrast_set modifies dataset)""")
     argp.add_argument('--max_length', type=int, default=128,
                       help="""This argument limits the maximum sequence length used during training/evaluation.
@@ -76,6 +77,21 @@ def main():
             dataset = datasets.Dataset.from_pandas(original_dataset)
     if dataset_id[0] == 'boolq':
         dataset = datasets.load_dataset("super_glue", "boolq")
+        if analysis_id[0] == 'perturbed_questions':
+            with open('boolq_perturbed.json') as f:
+                d = json.load(f)
+            perturbed_dataset = json_normalize(d['data'])
+            perturbed_dataset.drop(index=perturbed_dataset.index[0], axis=0, inplace=True)
+            perturbed_dataset.drop(['title'], axis=1, inplace=True)
+            for index, row in perturbed_dataset.iterrows():
+                for perturbed_question in row["perturbed_questions"]:
+                    perturbed_dataset = perturbed_dataset.append({'paragraph': row["paragraph"], 'question': perturbed_question['perturbed_q'],
+                                    'answer': perturbed_question['answer']}, ignore_index=True)
+            perturbed_dataset.drop(['perturbed_questions'], axis=1, inplace=True)
+            for index, row in perturbed_dataset.iterrows():
+                row['answer'] = row['answer'].lower()
+            perturbed_dataset.rename(columns={'paragraph': 'passage'}, inplace=True)
+            dataset = datasets.Dataset.from_pandas(perturbed_dataset)
     else:
         dataset = datasets.load_dataset(*dataset_id)
 
