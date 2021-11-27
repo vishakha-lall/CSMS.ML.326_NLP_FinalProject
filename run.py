@@ -41,7 +41,10 @@ def main():
         By default, "nli" will use the SNLI dataset, and "qa" will use the SQuAD dataset.""")
     argp.add_argument('--dataset', type=str, default=None,
                       help="""This argument overrides the default dataset used for the specified task.""")
-    argp.add_argument('--analysis', type=str, choices=['contrast_set','perturbed_questions'], default=None,
+    argp.add_argument('--train_test_split', type=float, default=None,
+                      help="""This argument fetches the fraction of test/validation data to train data""")
+    argp.add_argument('--analysis', type=str,
+                      choices=['contrast_set', 'perturbed_questions', 'adversarial_fine_tuning'], default=None,
                       help="""This argument is used for specifying which analysis we are performing (contrast_set modifies dataset)""")
     argp.add_argument('--max_length', type=int, default=128,
                       help="""This argument limits the maximum sequence length used during training/evaluation.
@@ -64,17 +67,31 @@ def main():
     eval_split = 'validation_matched' if dataset_id == ('glue', 'mnli') else 'validation'
     # Load the raw data
     # Add custom small datasets
-    if dataset_id[0] == 'squad_mini_30':
-        # 30 random sample indices
-        dataset_samples_idx = [7600, 4206, 253, 5315, 3636, 837, 4301, 6856, 8323, 9668, 6443, 7938, 6899, 8053, 6611,
-                               5171, 7707, 8447, 2531, 5543, 5287, 4938, 7762, 2565, 8135, 7065, 6877, 4010, 3434, 4932]
-        dataset = datasets.load_dataset('squad', split='validation')
-        dataset = dataset.select(dataset_samples_idx)
+    if dataset_id[0] == 'squad':
+        dataset = datasets.load_dataset('squad')
         if analysis_id[0] == 'contrast_set':
+            # 30 random sample indices
+            dataset_samples_idx = [7600, 4206, 253, 5315, 3636, 837, 4301, 6856, 8323, 9668, 6443, 7938, 6899, 8053,
+                                   6611,
+                                   5171, 7707, 8447, 2531, 5543, 5287, 4938, 7762, 2565, 8135, 7065, 6877, 4010, 3434,
+                                   4932]
+            dataset = dataset['validation']
+            dataset = dataset.select(dataset_samples_idx)
             original_dataset = pd.DataFrame(dataset)
             contrast_set_context = pd.read_csv('contrast_set_context.csv')
             original_dataset['context'] = contrast_set_context['context']
             dataset = datasets.Dataset.from_pandas(original_dataset)
+        if analysis_id[0] == 'adversarial_fine_tuning':
+            original_dataset = dataset
+            adversarial_dataset_1 = datasets.load_dataset('squad_adversarial', 'AddSent')
+            adversarial_dataset_2 = datasets.load_dataset('squad_adversarial', 'AddOneSent')
+            adversarial_dataset = datasets.concatenate_datasets(
+                [adversarial_dataset_1['validation'], adversarial_dataset_2['validation']])
+            adversarial_dataset = adversarial_dataset.shuffle(seed=9)
+            split_dataset = adversarial_dataset.train_test_split(args.train_test_split)
+            dataset['train'] = datasets.concatenate_datasets([split_dataset['train'], original_dataset['train']])
+            dataset['validation'] = split_dataset['test']
+
     if dataset_id[0] == 'boolq':
         dataset = datasets.load_dataset("super_glue", "boolq")
         if analysis_id[0] == 'perturbed_questions':
@@ -85,8 +102,9 @@ def main():
             perturbed_dataset.drop(['title'], axis=1, inplace=True)
             for index, row in perturbed_dataset.iterrows():
                 for perturbed_question in row["perturbed_questions"]:
-                    perturbed_dataset = perturbed_dataset.append({'paragraph': row["paragraph"], 'question': perturbed_question['perturbed_q'],
-                                    'answer': perturbed_question['answer']}, ignore_index=True)
+                    perturbed_dataset = perturbed_dataset.append(
+                        {'paragraph': row["paragraph"], 'question': perturbed_question['perturbed_q'],
+                         'answer': perturbed_question['answer']}, ignore_index=True)
             perturbed_dataset.drop(['perturbed_questions'], axis=1, inplace=True)
             for index, row in perturbed_dataset.iterrows():
                 if row['answer'] == 'TRUE':
@@ -121,7 +139,7 @@ def main():
         # prepare_eval_dataset = prepare_dataset_nli
     elif args.task == 'boolqa':
         boolq_enc = dataset.map(lambda x: tokenizer(x['question'], x['passage'], truncation="only_second"),
-                                 batched=True)
+                                batched=True)
         prepare_train_dataset = boolq_enc["train"]
         prepare_eval_dataset = boolq_enc["validation"]
     else:
@@ -131,7 +149,7 @@ def main():
     if dataset_id == ('snli',):
         # remove SNLI examples with no label
         dataset = dataset.filter(lambda ex: ex['label'] != -1)
-    
+
     train_dataset = None
     eval_dataset = None
     train_dataset_featurized = None
@@ -182,7 +200,7 @@ def main():
             predictions=eval_preds.predictions, references=eval_preds.label_ids)
     elif args.task == 'nli':
         compute_metrics = compute_accuracy
-    elif args.task =='boolqa':
+    elif args.task == 'boolqa':
         compute_metrics = compute_accuracy_boolqa
 
     # This function wraps the compute_metrics function, storing the model's predictions
@@ -247,6 +265,7 @@ def main():
                     example_with_prediction['predicted_label'] = int(eval_predictions.predictions[i].argmax())
                     f.write(json.dumps(example_with_prediction))
                     f.write('\n')
+
 
 if __name__ == "__main__":
     main()
