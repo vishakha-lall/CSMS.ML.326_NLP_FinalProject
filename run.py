@@ -83,12 +83,12 @@ def main():
             dataset = datasets.Dataset.from_pandas(original_dataset)
         if analysis_id[0] == 'adversarial_fine_tuning':
             original_dataset = dataset
-            adversarial_dataset_1 = datasets.load_dataset('squad_adversarial', 'AddSent')
-            adversarial_dataset_2 = datasets.load_dataset('squad_adversarial', 'AddOneSent')
-            adversarial_dataset = datasets.concatenate_datasets(
-                [adversarial_dataset_1['validation'], adversarial_dataset_2['validation']])
-            adversarial_dataset = adversarial_dataset.shuffle(seed=9)
-            split_dataset = adversarial_dataset.train_test_split(args.train_test_split)
+            adversarial_dataset = datasets.load_dataset('squad_adversarial', 'AddSent')
+            #adversarial_dataset = datasets.load_dataset('squad_adversarial', 'AddOneSent')
+            #adversarial_dataset = datasets.concatenate_datasets(
+            #    [adversarial_dataset_1['validation'], adversarial_dataset_2['validation']])
+            #adversarial_dataset = adversarial_dataset.shuffle(seed=9)
+            split_dataset = adversarial_dataset['validation'].train_test_split(args.train_test_split)
             dataset['train'] = datasets.concatenate_datasets([split_dataset['train'], original_dataset['train']])
             dataset['validation'] = split_dataset['test']
     elif dataset_id[0] == 'boolq':
