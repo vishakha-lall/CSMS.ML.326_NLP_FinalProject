@@ -91,8 +91,7 @@ def main():
             split_dataset = adversarial_dataset.train_test_split(args.train_test_split)
             dataset['train'] = datasets.concatenate_datasets([split_dataset['train'], original_dataset['train']])
             dataset['validation'] = split_dataset['test']
-
-    if dataset_id[0] == 'boolq':
+    elif dataset_id[0] == 'boolq':
         dataset = datasets.load_dataset("super_glue", "boolq")
         if analysis_id[0] == 'perturbed_questions':
             with open('boolq_perturbed.json') as f:
