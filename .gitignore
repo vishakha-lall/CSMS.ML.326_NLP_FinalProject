@@ -1,2 +1,5 @@
 *.pyc
 output/
+eval_output/
+trained_model/
+
