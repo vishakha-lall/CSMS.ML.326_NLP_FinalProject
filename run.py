@@ -1,7 +1,7 @@
 import checklist
 from checklist.test_suite import TestSuite
 import datasets
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification, \
     AutoModelForQuestionAnswering, Trainer, TrainingArguments, HfArgumentParser
 from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
     prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy, compute_accuracy_boolqa
@@ -124,9 +124,10 @@ def main():
             # Just run the checklist test suite and return.
             suite_path = args.checklist_test_suite_path
             suite = TestSuite.from_file(suite_path)
+            model_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=0)
 
             # Must pass the pairs through a lambda function to use the pre-trained model.
-            suite.run(lambda pairs: predconfs(model, pairs), n=100, overwrite=True)
+            suite.run(lambda pairs: predconfs(model_pipeline, pairs), n=100, overwrite=True)
             suite.summary()
             return
     elif dataset_id[0] == 'boolq':
