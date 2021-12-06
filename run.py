@@ -1,3 +1,5 @@
+import checklist
+from checklist.test_suite import TestSuite
 import datasets
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
     AutoModelForQuestionAnswering, Trainer, TrainingArguments, HfArgumentParser
@@ -5,11 +7,26 @@ from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
     prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy, compute_accuracy_boolqa
 import os
 import json
+import numpy as np
 import pandas as pd
 from pandas.io.json import json_normalize
 
 NUM_PREPROCESSING_WORKERS = 2
 
+
+def predconfs(model, context_question_pairs):
+    preds = []
+    confs = []
+    for c, q in context_question_pairs:
+        try:
+            p = model(question=q, context=c, truncation=True, )
+            preds.append(p['answer'])
+            confs.append(p['score'])
+        except Exception:
+            print('Failed', q)
+            preds.append(' ')
+            confs.append(1)
+    return preds, np.array(confs)
 
 def main():
     argp = HfArgumentParser(TrainingArguments)
@@ -44,8 +61,10 @@ def main():
     argp.add_argument('--train_test_split', type=float, default=None,
                       help="""This argument fetches the fraction of test/validation data to train data""")
     argp.add_argument('--analysis', type=str,
-                      choices=['contrast_set', 'perturbed_questions', 'adversarial_fine_tuning'], default=None,
+                      choices=['contrast_set', 'perturbed_questions', 'adversarial_fine_tuning', 'checklist'], default=None,
                       help="""This argument is used for specifying which analysis we are performing (contrast_set modifies dataset)""")
+    argp.add_argument('--checklist_test_suite_path', type=str, default='squad_suite.pkl',
+                      help="""This argument specifies the path and filename for a pre-pickled CheckList TestSuite object""")
     argp.add_argument('--max_length', type=int, default=128,
                       help="""This argument limits the maximum sequence length used during training/evaluation.
         Shorter sequence lengths need less memory and computation time, but some examples may end up getting truncated.""")
@@ -63,6 +82,16 @@ def main():
     analysis_id = tuple(args.analysis.split(':')) if args.analysis is not None else ('na',)
     # NLI models need to have the output label count specified (label 0 is "entailed", 1 is "neutral", and 2 is "contradiction")
     task_kwargs = {'num_labels': 3} if args.task == 'nli' else {}
+
+    # Here we select the right model fine-tuning head
+    model_classes = {'qa': AutoModelForQuestionAnswering,
+                     'nli': AutoModelForSequenceClassification,
+                     'boolqa': AutoModelForSequenceClassification}
+    model_class = model_classes[args.task]
+    # Initialize the model and tokenizer from the specified pretrained model/checkpoint
+    model = model_class.from_pretrained(args.model, **task_kwargs)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
+
     # MNLI has two validation splits (one with matched domains and one with mismatched domains). Most datasets just have one "validation" split
     eval_split = 'validation_matched' if dataset_id == ('glue', 'mnli') else 'validation'
     # Load the raw data
@@ -81,7 +110,7 @@ def main():
             contrast_set_context = pd.read_csv('contrast_set_context.csv')
             original_dataset['context'] = contrast_set_context['context']
             dataset = datasets.Dataset.from_pandas(original_dataset)
-        if analysis_id[0] == 'adversarial_fine_tuning':
+        elif analysis_id[0] == 'adversarial_fine_tuning':
             original_dataset = dataset
             adversarial_dataset = datasets.load_dataset('squad_adversarial', 'AddSent')
             #adversarial_dataset = datasets.load_dataset('squad_adversarial', 'AddOneSent')
@@ -91,6 +120,15 @@ def main():
             split_dataset = adversarial_dataset['validation'].train_test_split(args.train_test_split)
             dataset['train'] = datasets.concatenate_datasets([split_dataset['train'], original_dataset['train']])
             dataset['validation'] = split_dataset['test']
+        elif analysis_id[0] == 'checklist':
+            # Just run the checklist test suite and return.
+            suite_path = args.checklist_test_suite_path
+            suite = TestSuite.from_file(suite_path)
+
+            # Must pass the pairs through a lambda function to use the pre-trained model.
+            suite.run(lambda pairs: predconfs(model, pairs), n=100, overwrite=True)
+            suite.summary()
+            return
     elif dataset_id[0] == 'boolq':
         dataset = datasets.load_dataset("super_glue", "boolq")
         if analysis_id[0] == 'perturbed_questions':
@@ -118,15 +156,6 @@ def main():
             dataset['validation'] = datasets.Dataset.from_pandas(perturbed_dataset)
     else:
         dataset = datasets.load_dataset(*dataset_id)
-
-    # Here we select the right model fine-tuning head
-    model_classes = {'qa': AutoModelForQuestionAnswering,
-                     'nli': AutoModelForSequenceClassification,
-                     'boolqa': AutoModelForSequenceClassification}
-    model_class = model_classes[args.task]
-    # Initialize the model and tokenizer from the specified pretrained model/checkpoint
-    model = model_class.from_pretrained(args.model, **task_kwargs)
-    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
 
     # Select the dataset preprocessing function (these functions are defined in helpers.py)
     if args.task == 'qa':
