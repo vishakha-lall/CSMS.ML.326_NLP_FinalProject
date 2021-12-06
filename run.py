@@ -18,14 +18,14 @@ def predconfs(model, context_question_pairs):
     preds = []
     confs = []
     for c, q in context_question_pairs:
-        try:
+        # try:
             p = model(question=q, context=c, truncation=True, )
             preds.append(p['answer'])
             confs.append(p['score'])
-        except Exception:
-            print('Failed', q)
-            preds.append(' ')
-            confs.append(1)
+        # except Exception:
+        #     print('Failed', q)
+        #     preds.append(' ')
+        #     confs.append(1)
     return preds, np.array(confs)
 
 def main():
@@ -124,7 +124,7 @@ def main():
             # Just run the checklist test suite and return.
             suite_path = args.checklist_test_suite_path
             suite = TestSuite.from_file(suite_path)
-            model_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=0)
+            model_pipeline = pipeline("question-answering", model=model, tokenizer=tokenizer, device=0)
 
             # Must pass the pairs through a lambda function to use the pre-trained model.
             suite.run(lambda pairs: predconfs(model_pipeline, pairs), n=100, overwrite=True)
