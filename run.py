@@ -29,9 +29,6 @@ def predconfs(model, context_question_pairs):
         #     confs.append(1)
     return preds, np.array(confs)
 
-def example_to_dict_fn(obj):
-    return {'context': obj[0], 'question': obj[1]}
-
 def main():
     argp = HfArgumentParser(TrainingArguments)
     # The HfArgumentParser object collects command-line arguments into an object (and provides default values for unspecified arguments).
@@ -86,15 +83,6 @@ def main():
     analysis_id = tuple(args.analysis.split(':')) if args.analysis is not None else ('na',)
     # NLI models need to have the output label count specified (label 0 is "entailed", 1 is "neutral", and 2 is "contradiction")
     task_kwargs = {'num_labels': 3} if args.task == 'nli' else {}
-
-    # Here we select the right model fine-tuning head
-    model_classes = {'qa': AutoModelForQuestionAnswering,
-                     'nli': AutoModelForSequenceClassification,
-                     'boolqa': AutoModelForSequenceClassification}
-    model_class = model_classes[args.task]
-    # Initialize the model and tokenizer from the specified pretrained model/checkpoint
-    model = model_class.from_pretrained(args.model, **task_kwargs)
-    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
 
     # MNLI has two validation splits (one with matched domains and one with mismatched domains). Most datasets just have one "validation" split
     eval_split = 'validation_matched' if dataset_id == ('glue', 'mnli') else 'validation'
@@ -166,11 +154,11 @@ def main():
                                 'answer_start': [pair[0].index(label)if label in pair[0] else -1]
                             })
 
-            new_train_data = datasets.Dataset.from_dict(new_data['train'], features=dataset['train'].features)
-            new_validation_data = datasets.Dataset.from_dict(new_data['validation'], features=dataset['validation'].features)
+            checklist_train_data = datasets.Dataset.from_dict(new_data['train'], features=dataset['train'].features)
+            checklist_validation_data = datasets.Dataset.from_dict(new_data['validation'], features=dataset['validation'].features)
 
-            dataset['train'] = datasets.concatenate_datasets([dataset['train'], new_train_data])
-            dataset['validation'] = datasets.concatenate_datasets([dataset['validation'], new_validation_data])
+            dataset['train'] = datasets.concatenate_datasets([dataset['train'], checklist_train_data])
+            dataset['validation'] = datasets.concatenate_datasets([dataset['validation'], checklist_validation_data])
 
             #dataset[split] = datasets.concatenate_datasets(dataset[split], data)
     elif dataset_id[0] == 'boolq':
@@ -200,6 +188,15 @@ def main():
             dataset['validation'] = datasets.Dataset.from_pandas(perturbed_dataset)
     else:
         dataset = datasets.load_dataset(*dataset_id)
+
+    # Here we select the right model fine-tuning head
+    model_classes = {'qa': AutoModelForQuestionAnswering,
+                     'nli': AutoModelForSequenceClassification,
+                     'boolqa': AutoModelForSequenceClassification}
+    model_class = model_classes[args.task]
+    # Initialize the model and tokenizer from the specified pretrained model/checkpoint
+    model = model_class.from_pretrained(args.model, **task_kwargs)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
 
     # Select the dataset preprocessing function (these functions are defined in helpers.py)
     if args.task == 'qa':
