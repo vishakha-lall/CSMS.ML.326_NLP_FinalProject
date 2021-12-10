@@ -131,6 +131,13 @@ def main():
             # Manually build squad-like data from the test suite
             # Put roughly half of it in train and the rest in validation.
 
+            new_data = {
+                'train': {'id': [], 'title': [], 'context': [], 'question': [], 'answers': []},
+                'validation': {'id': [], 'title': [], 'context': [], 'question': [], 'answers': []}
+            }
+
+            num_items = 0
+
             for test_name in suite.tests:
                 test = suite.tests[test_name]
 
@@ -146,17 +153,26 @@ def main():
 
                     # Each series has an equal number of context/question pairs and labels
                     for pair, label in zip(pairs, labels):
-                        data = {
-                            'id': None,
-                            'title': None,
-                            'context': pair[0],
-                            'question': pair[1],
-                            'answers': {
+                        key = 'checklist%d' % num_items
+                        title = 'CheckList example #%d' % num_items
+                        num_items += 1
+
+                        new_data[split]['id'].append(key)
+                        new_data[split]['title'].append(title)
+                        new_data[split]['context'].append(pair[0])
+                        new_data[split]['question'].append(pair[1])
+                        new_data[split]['answers'].append({
                                 'text': [label],
-                                'answer_start': [pair[0].index(label)]
-                            }
-                        }
-                        dataset[split].add_item(data)
+                                'answer_start': [pair[0].index(label)if label in pair[0] else -1]
+                            })
+
+            new_train_data = datasets.Dataset.from_dict(new_data['train'], features=dataset['train'].features)
+            new_validation_data = datasets.Dataset.from_dict(new_data['validation'], features=dataset['validation'].features)
+
+            dataset['train'] = datasets.concatenate_datasets([dataset['train'], new_train_data])
+            dataset['validation'] = datasets.concatenate_datasets([dataset['validation'], new_validation_data])
+
+            #dataset[split] = datasets.concatenate_datasets(dataset[split], data)
     elif dataset_id[0] == 'boolq':
         dataset = datasets.load_dataset("super_glue", "boolq")
         if analysis_id[0] == 'perturbed_questions':
