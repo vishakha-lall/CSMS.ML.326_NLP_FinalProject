@@ -7,6 +7,7 @@ from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
     prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy, compute_accuracy_boolqa
 import os
 import json
+import random
 import numpy as np
 import pandas as pd
 from pandas.io.json import json_normalize
@@ -27,6 +28,9 @@ def predconfs(model, context_question_pairs):
         #     preds.append(' ')
         #     confs.append(1)
     return preds, np.array(confs)
+
+def example_to_dict_fn(obj):
+    return {'context': obj[0], 'question': obj[1]}
 
 def main():
     argp = HfArgumentParser(TrainingArguments)
@@ -121,15 +125,38 @@ def main():
             dataset['train'] = datasets.concatenate_datasets([split_dataset['train'], original_dataset['train']])
             dataset['validation'] = split_dataset['test']
         elif analysis_id[0] == 'checklist':
-            # Just run the checklist test suite and return.
             suite_path = args.checklist_test_suite_path
             suite = TestSuite.from_file(suite_path)
-            model_pipeline = pipeline("question-answering", model=model, tokenizer=tokenizer, device=0)
 
-            # Must pass the pairs through a lambda function to use the pre-trained model.
-            suite.run(lambda pairs: predconfs(model_pipeline, pairs), overwrite=True)
-            suite.summary()
-            return
+            # Manually build squad-like data from the test suite
+            # Put roughly half of it in train and the rest in validation.
+
+            for test_name in suite.tests:
+                test = suite.tests[test_name]
+
+                # Invariance tests do not have labels, so we cannot train against this data
+                # the way it is.
+                if not test.labels:
+                    continue
+
+                # Each test has hundreds of examples.
+                # Context/Question pairs are in test.data, and labels are in test.labels
+                for pairs, labels in zip(test.data, test.labels):
+                    split = 'train' if random.random() > 0.5 else 'validation'
+
+                    # Each series has an equal number of context/question pairs and labels
+                    for pair, label in zip(pairs, labels):
+                        data = {
+                            'id': None,
+                            'title': None,
+                            'context': pair[0],
+                            'question': pair[1],
+                            'answers': {
+                                'text': [label],
+                                'answer_start': [pair[0].index(label)]
+                            }
+                        }
+                        dataset[split].add_item(data)
     elif dataset_id[0] == 'boolq':
         dataset = datasets.load_dataset("super_glue", "boolq")
         if analysis_id[0] == 'perturbed_questions':
@@ -197,7 +224,17 @@ def main():
         else:
             train_dataset_featurized = prepare_train_dataset
     if training_args.do_eval:
-        if dataset_id[0] == 'squad_mini_30' or dataset_id[0] == 'squad_mini_30_contrast_set':
+        if analysis_id[0] == 'checklist':
+            # Just run the checklist test suite and return.
+            suite_path = args.checklist_test_suite_path
+            suite = TestSuite.from_file(suite_path)
+            model_pipeline = pipeline("question-answering", model=model, tokenizer=tokenizer, device=0)
+
+            # Must pass the pairs through a lambda function to use the pre-trained model.
+            suite.run(lambda pairs: predconfs(model_pipeline, pairs), n=1, overwrite=True)
+            suite.summary()
+            return
+        elif dataset_id[0] == 'squad_mini_30' or dataset_id[0] == 'squad_mini_30_contrast_set':
             eval_dataset = dataset
         else:
             eval_dataset = dataset[eval_split]
