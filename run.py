@@ -244,7 +244,7 @@ def main():
             model_pipeline = pipeline("question-answering", model=model, tokenizer=tokenizer, device=0)
 
             # Must pass the pairs through a lambda function to use the pre-trained model.
-            suite.run(lambda pairs: predconfs(model_pipeline, pairs), n=1, overwrite=True)
+            suite.run(lambda pairs: predconfs(model_pipeline, pairs), overwrite=True)
             suite.summary()
             return
         elif dataset_id[0] == 'squad_mini_30' or dataset_id[0] == 'squad_mini_30_contrast_set':
